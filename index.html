@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fair Share Spinner Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f2f5; color: #1a1a1a; padding: 20px; }
+        .container { display: flex; gap: 40px; margin-top: 20px; flex-wrap: wrap; justify-content: center; max-width: 1000px; }
+        
+        /* Wheel Styling */
+        #canvasContainer { position: relative; width: 400px; height: 400px; }
+        canvas { border-radius: 50%; box-shadow: 0 10px 30px rgba(0,0,0,0.15); background: white; transition: transform 0.1s; }
+        #pointer { 
+            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 15px solid transparent;
+            border-right: 15px solid transparent; border-top: 30px solid #ff4757; z-index: 10;
+        }
+
+        /* UI Elements */
+        .controls { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); min-width: 350px; }
+        .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
+        input { padding: 10px; border: 2px solid #ddd; border-radius: 8px; flex-grow: 1; outline: none; }
+        input:focus { border-color: #5c67f2; }
+        
+        button { padding: 10px 15px; cursor: pointer; background: #5c67f2; color: white; border: none; border-radius: 8px; font-weight: 600; transition: 0.2s; }
+        button:hover { background: #4a54e1; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        .btn-secondary { background: #e2e8f0; color: #475569; margin-top: 10px; }
+        .btn-secondary:hover { background: #cbd5e1; }
+        
+        ul { list-style: none; padding: 0; max-height: 300px; overflow-y: auto; }
+        li { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #f0f0f0; }
+        .name-label { font-weight: 500; flex-grow: 1; }
+        
+        .counter-controls { display: flex; align-items: center; gap: 8px; }
+        .count-val { font-weight: bold; min-width: 25px; text-align: center; color: #5c67f2; }
+        .adjust-btn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #334155; border-radius: 50%; }
+        .adjust-btn:hover { background: #e2e8f0; }
+        
+        #winner-announcement { margin-bottom: 15px; font-size: 1.8rem; font-weight: 800; color: #2d3436; height: 2em; text-align: center; }
+        .spin-btn-large { width: 100%; margin-top: 20px; font-size: 1.2rem; background: #2ed573; padding: 15px; }
+        .spin-btn-large:hover { background: #26af5f; }
+    </style>
+</head>
+<body>
+
+    <div id="winner-announcement">Ready to Spin? 🎡</div>
+
+    <div class="container">
+        <div id="canvasContainer">
+            <div id="pointer"></div>
+            <canvas id="wheel" width="400" height="400"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <input type="text" id="nameInput" placeholder="Add participant name..." onkeypress="if(event.key==='Enter') addPerson()">
+                <button onclick="addPerson()">Add</button>
+            </div>
+            
+            <ul id="personList"></ul>
+            
+            <button id="spinBtn" class="spin-btn-large" onclick="spinWheel()">SPIN TO PICK</button>
+            <button class="btn-secondary" style="width: 100%;" onclick="resetData()">Reset Everything</button>
+        </div>
+    </div>
+
+    <script>
+        let people = JSON.parse(localStorage.getItem('meetingWheelData')) || [];
+        let currentRotation = 0;
+        let isSpinning = false;
+        
+        const canvas = document.getElementById('wheel');
+        const ctx = canvas.getContext('2d');
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#2ed573', '#ffa502', '#5352ed'];
+
+        function saveData() {
+            localStorage.setItem('meetingWheelData', JSON.stringify(people));
+        }
+
+        function addPerson() {
+            const input = document.getElementById('nameInput');
+            const name = input.value.trim();
+            if (name) {
+                people.push({ 
+                    name, 
+                    count: 0, 
+                    color: colors[people.length % colors.length] 
+                });
+                input.value = '';
+                saveData();
+                updateUI();
+                drawWheel();
+            }
+        }
+
+        function adjustCount(index, amount) {
+            people[index].count = Math.max(0, people[index].count + amount);
+            saveData();
+            updateUI();
+            drawWheel();
+        }
+
+        function removePerson(index) {
+            people.splice(index, 1);
+            saveData();
+            updateUI();
+            drawWheel();
+        }
+
+        function resetData() {
+            if(confirm("Are you sure you want to clear all names and counts?")) {
+                people = [];
+                localStorage.removeItem('meetingWheelData');
+                updateUI();
+                drawWheel();
+            }
+        }
+
+        function updateUI() {
+            const list = document.getElementById('personList');
+            list.innerHTML = people.map((p, i) => `
+                <li>
+                    <span class="name-label">${p.name}</span>
+                    <div class="counter-controls">
+                        <button class="adjust-btn" onclick="adjustCount(${i}, -1)">−</button>
+                        <span class="count-val">${p.count}</span>
+                        <button class="adjust-btn" onclick="adjustCount(${i}, 1)">+</button>
+                        <button class="adjust-btn" style="color: #ff4757; margin-left: 10px;" onclick="removePerson(${i})">×</button>
+                    </div>
+                </li>
+            `).join('');
+            document.getElementById('spinBtn').disabled = people.length === 0;
+        }
+
+        function drawWheel() {
+            // The slice weight formula: Weight = 1 / (Shares + 1)
+            const totalWeight = people.reduce((acc, p) => acc + (1 / (p.count + 1)), 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (people.length === 0) {
+                ctx.beginPath();
+                ctx.arc(200, 200, 180, 0, 2 * Math.PI);
+                ctx.fillStyle = '#f8fafc';
+                ctx.fill();
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.stroke();
+                return;
+            }
+
+            let startAngle = currentRotation;
+            
+            people.forEach(p => {
+                const weight = (1 / (p.count + 1)) / totalWeight;
+                const sliceAngle = weight * 2 * Math.PI;
+
+                ctx.beginPath();
+                ctx.moveTo(200, 200);
+                ctx.arc(200, 200, 180, startAngle, startAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw Text
+                ctx.save();
+                ctx.translate(200, 200);
+                ctx.rotate(startAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "white";
+                ctx.font = "bold 14px Segoe UI";
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.shadowBlur = 4;
+                // Only show name if slice is big enough
+                if(sliceAngle > 0.1) {
+                    ctx.fillText(p.name, 170, 5);
+                }
+                ctx.restore();
+
+                startAngle += sliceAngle;
+            });
+        }
+
+        function spinWheel() {
+            if (isSpinning || people.length === 0) return;
+            isSpinning = true;
+            document.getElementById('winner-announcement').innerText = "Spinning...";
+
+            const spinDuration = 4000;
+            const extraSpins = 7 + Math.random() * 5;
+            const totalRotation = extraSpins * 2 * Math.PI;
+            const startTimestamp = performance.now();
+
+            function animate(now) {
+                const elapsed = now - startTimestamp;
+                const progress = Math.min(elapsed / spinDuration, 1);
+                
+                // Cubic ease-out
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const currentAngle = totalRotation * easeOut;
+                
+                currentRotation = currentAngle;
+                drawWheel();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    determineWinner();
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function determineWinner() {
+            isSpinning = false;
+            const totalWeight = people.reduce((acc, p) => acc + (1 / (p.count + 1)), 0);
+            
+            // Normalize rotation to 0 - 2PI and adjust for pointer at top
+            let finalRotation = (1.5 * Math.PI - (currentRotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+            
+            let cumulativeAngle = 0;
+            let winnerIndex = 0;
+
+            for (let i = 0; i < people.length; i++) {
+                const weight = (1 / (people[i].count + 1)) / totalWeight;
+                const sliceAngle = weight * 2 * Math.PI;
+                if (finalRotation >= cumulativeAngle && finalRotation < cumulativeAngle + sliceAngle) {
+                    winnerIndex = i;
+                    break;
+                }
+                cumulativeAngle += sliceAngle;
+            }
+
+            const winner = people[winnerIndex];
+            winner.count++;
+            document.getElementById('winner-announcement').innerText = `🎉 ${winner.name}!`;
+            
+            saveData();
+            updateUI();
+            drawWheel();
+        }
+
+        // Initial render
+        updateUI();
+        drawWheel();
+    </script>
+</body>
+</html>
